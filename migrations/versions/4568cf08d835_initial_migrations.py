@@ -1,8 +1,8 @@
-""" initial migrations
+"""initial migrations
 
-Revision ID: a47822b1c4e1
+Revision ID: 4568cf08d835
 Revises: 
-Create Date: 2024-09-15 05:26:37.188306
+Create Date: 2024-09-19 14:14:01.208911
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'a47822b1c4e1'
+revision = '4568cf08d835'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -36,6 +36,7 @@ def upgrade():
     sa.Column('pages', sa.Integer(), nullable=False),
     sa.Column('reference_style', sa.String(length=50), nullable=False),
     sa.Column('due_date', sa.DateTime(), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], name=op.f('fk_assignment_user_id_user')),
     sa.PrimaryKeyConstraint('id')
@@ -45,6 +46,8 @@ def upgrade():
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('assignment_id', sa.Integer(), nullable=False),
     sa.Column('amount', sa.Float(), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['assignment_id'], ['assignment.id'], name=op.f('fk_bids_assignment_id_assignment')),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], name=op.f('fk_bids_user_id_user')),
     sa.PrimaryKeyConstraint('id')

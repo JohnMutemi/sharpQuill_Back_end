@@ -96,6 +96,11 @@ class BiddingResource(Resource):
         assignment_id = data.get('assignment_id')
         amount = data.get('amount')
 
+        # Validate the assignment exists and is available
+        assignment = Assignment.query.get(assignment_id)
+        if not assignment or assignment.status != 'available':
+            return {"message": "Assignment not available for bidding."}, 400
+
         bid = Bid(user_id=user_id, assignment_id=assignment_id, amount=amount)
         db.session.add(bid)
         db.session.commit()
@@ -106,7 +111,7 @@ class AssignmentResource(Resource):
     @role_required(['client'])  # Only clients can create assignments
     def post(self):
         user_identity = get_jwt_identity()
-        user_id = user_identity.get('user_id') if isinstance(user_identity, dict) else user_identity
+        user_id = user_identity.get('user_id')
 
         title = request.form.get('title')
         description = request.form.get('description')
@@ -115,7 +120,7 @@ class AssignmentResource(Resource):
         reference_style = request.form.get('reference_style')
         due_date = request.form.get('due_date')
 
-        if not title or not description or not price_tag or not pages or not reference_style or not due_date:
+        if not all([title, description, price_tag, pages, reference_style, due_date]):
             return {"message": "All fields are required"}, 400
 
         try:
@@ -135,32 +140,31 @@ class AssignmentResource(Resource):
             user_id=user_id
         )
 
-        try:
-            db.session.add(new_assignment)
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            return {"message": "Error saving the assignment: " + str(e)}, 500
+        db.session.add(new_assignment)
+        db.session.commit()
 
         return new_assignment.to_dict(), 201
     
     @jwt_required()
     def get(self, assignment_id=None):
-            
-            if assignment_id:
-                assignment = Assignment.query.get(assignment_id)
-                if not assignment:
-                    return {"message": "Assignment not found"}, 404
-                return assignment.to_dict(), 200
+        if assignment_id:
+            assignment = Assignment.query.get(assignment_id)
+            if not assignment:
+                return {"message": "Assignment not found"}, 404
+            return assignment.to_dict(), 200
 
-            assignments = Assignment.query.all()
-            return jsonify([assignment.to_dict() for assignment in assignments])
+        status = request.args.get('status')
+        query = Assignment.query
+        if status:
+            query = query.filter_by(status=status)
+        assignments = query.all()
+        return jsonify([assignment.to_dict() for assignment in assignments])
 
     @jwt_required()
     @role_required(['client'])  # Only clients can update assignments
     def put(self, assignment_id):
         user_identity = get_jwt_identity()
-        user_id = user_identity.get('user_id') if isinstance(user_identity, dict) else user_identity
+        user_id = user_identity.get('user_id')
 
         assignment = Assignment.query.get(assignment_id)
         if not assignment:
@@ -193,19 +197,14 @@ class AssignmentResource(Resource):
         assignment.reference_style = reference_style
         assignment.due_date = due_date
 
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            return {"message": "Error updating the assignment: " + str(e)}, 500
-
+        db.session.commit()
         return assignment.to_dict(), 200
 
     @jwt_required()
     @role_required(['client'])  # Only clients can delete assignments
     def delete(self, assignment_id):
         user_identity = get_jwt_identity()
-        user_id = user_identity.get('user_id') if isinstance(user_identity, dict) else user_identity
+        user_id = user_identity.get('user_id')
 
         assignment = Assignment.query.get(assignment_id)
         if not assignment:
@@ -214,15 +213,31 @@ class AssignmentResource(Resource):
         if assignment.user_id != user_id:
             return {"message": "You are not authorized to delete this assignment"}, 403
 
-        try:
-            db.session.delete(assignment)
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            return {"message": "Error deleting the assignment: " + str(e)}, 500
-
+        db.session.delete(assignment)
+        db.session.commit()
         return {"message": "Assignment deleted successfully"}, 200
 
+    @jwt_required()
+    @role_required(['writer', 'client'])
+    @app.route('/assignments/upload/<int:assignment_id>', methods=['POST'])  
+    def post_file_upload(self, assignment_id):
+        assignment = Assignment.query.get(assignment_id)
+        if not assignment:
+            return {"message": "Assignment not found"}, 404
+
+        if assignment.status != 'in_progress':
+            return {"message": "Files can only be uploaded for assignments in progress."}, 400
+
+        if 'file' not in request.files:
+            return {"message": "No file part"}, 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return {"message": "No selected file"}, 400
+        file_path = f"/path/to/save/{file.filename}"  
+        file.save(file_path)
+
+        return {"message": "File uploaded successfully"}, 201
 class Login(Resource):
     def post(self):
         username = request.form.get('username')
@@ -284,7 +299,7 @@ class Logout(Resource):
 
 # Register API endpoints
 api.add_resource(UserResource, '/users', '/users/<int:user_id>')
-api.add_resource(AssignmentResource, '/assignments', '/assignments/<int:assignment_id>')
+api.add_resource(AssignmentResource, '/assignments', '/assignments/<int:assignment_id>', '/assignments/upload/<int:assignment_id>')
 api.add_resource(BiddingResource, '/bids')
 api.add_resource(Login, '/login')
 api.add_resource(Register, '/register')
